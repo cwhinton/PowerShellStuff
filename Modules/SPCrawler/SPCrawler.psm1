@@ -176,13 +176,18 @@ function discover-SiteCollections {
 
     save-WebApp -webAppSDXML $wa -discoveryQueueID $parentURLID
 
-    $wa.VirtualServer.ContentDatabases.ContentDatabase | 
+    $siteCollections = $wa.VirtualServer.ContentDatabases.ContentDatabase | 
         select -ExpandProperty ID  | 
-        get-siteDataContentDB -webAppURL $webAppURL |
+        get-siteDataContentDB -webAppURL $webAppURL
+    
+    $siteCollections | 
         foreach {
             $_.ContentDatabase.Sites.Site | select -ExpandProperty URL
         } | 
         push-discoveredURL -discoveryID $discoID -urlType 'SiteCollection' -parentURLID $parentURLID
+
+    $siteCollections | 
+        Save-SiteCollection -discoveryQueueID $parentURLID
 }
 
 function discover-SiteCollectionContents {
@@ -380,5 +385,16 @@ function remove-webAppPoliciesNotIn {
     $sqlConn.close()
 }
 
+function save-SiteCollection {
+    [cmdletbinding()]
+    param (
+        [parameter(Mandatory=$True,ValueFromPipeline=$true,Position=1)]
+        $siteCollectionSDXML,
+        $discoveryQueueID
+    )
+    begin {}
+    process {}
+    end {}
+}
+
 Export-ModuleMember -function start-webappDiscovery
-Export-ModuleMember -Function save-webApp
