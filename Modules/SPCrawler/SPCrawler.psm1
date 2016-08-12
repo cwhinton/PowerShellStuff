@@ -368,7 +368,7 @@ function remove-webAppPoliciesNotIn {
     $sqlTran = $sqlConn.beginTransaction()
     $tsql = 'select SPP_ID, SPP_LoginName, SPWAP_ID from SPWebAppPolicy join SPPolicy on SPP_ID = SPWAP_SPPID where SPWAP_SPWAID = @SPWA_ID'
     $x = Invoke-Query -sql $tsql -connection $sqlConn -transaction $sqlTran -parameters @{SPWA_ID=$spWebAppID}
-    $x | where {$currLoginNames -notcontains $x.SPP_LoginName} |
+    $x | where {$currLoginNames -notcontains $_.SPP_LoginName} |
         foreach {
             $tsql = 'delete from SPWebAppPolicy where SPWAP_ID = @SPWAP_ID'
             $result = Invoke-Sql -sql $tsql -connection $sqlConn -transaction $sqlTran -parameters @{SPWAP_ID=$_.SPWAP_ID}
@@ -378,5 +378,6 @@ function remove-webAppPoliciesNotIn {
     $sqlTran.Commit()
     $sqlConn.close()
 }
+
 Export-ModuleMember -function start-webappDiscovery
 Export-ModuleMember -Function save-webApp
