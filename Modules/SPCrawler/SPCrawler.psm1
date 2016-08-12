@@ -344,11 +344,13 @@ function save-webappPolicy {
                         $tsql += ", $paramName = @$paramName"
                     }
                 }
+                if (!$needSet) {
+                    $parameters.SPA_ID = $SPP_ID
+                    $tsql += " where SPP_ID = @SPP_ID"
+                    write-verbose "update SPPolicy SQL: $tsql"
+                    $x = invoke-SQL -sql $tsql -connection $sqlConn -transaction $sqlTran -parameters $parameters
+                }
             }
-            $parameters.SPA_ID = $SPP_ID
-            $tsql += " where SPP_ID = @SPP_ID"
-            write-verbose "update SPPolicy SQL: $tsql"
-            $x = invoke-SQL -sql $tsql -connection $sqlConn -transaction $sqlTran -parameters $parameters
 
         }
     }
