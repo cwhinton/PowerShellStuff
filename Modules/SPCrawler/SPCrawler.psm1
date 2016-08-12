@@ -325,7 +325,7 @@ function save-webappPolicy {
             $tsql = 'update SPPolicy '
             $parameters = @{}
             $needSet = $true
-            foreach ($attr in $webAppSDXML.VirtualServer.Metadata) {
+            foreach ($attr in $policy.VirtualServer.Metadata) {
                 $paramName=""
                 $attributeValue = $attr."#text"
                 switch ($attr.Name) {
