@@ -345,7 +345,7 @@ function save-webappPolicy {
                     }
                 }
             }
-            $parameters.SPA_ID = $SPA_ID
+            $parameters.SPA_ID = $SPP_ID
             $tsql += " where SPP_ID = @SPP_ID"
             write-verbose "update SPPolicy SQL: $tsql"
             $x = invoke-SQL -sql $tsql -connection $sqlConn -transaction $sqlTran -parameters $parameters
