@@ -174,7 +174,7 @@ function discover-SiteCollections {
 
     $wa = get-siteDataWebApp -webAppURL $webAppURL
 
-    save-WebApp -webAppSDXML $wa -discoveryQueueID $parentURLID
+#    save-WebApp -webAppSDXML $wa -discoveryQueueID $parentURLID
 
     $siteCollections = $wa.VirtualServer.ContentDatabases.ContentDatabase | 
         select -ExpandProperty ID  | 
