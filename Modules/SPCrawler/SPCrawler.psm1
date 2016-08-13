@@ -6,7 +6,7 @@ function getSQLConnection {
     New-Connection -server '(LocalDb)\MSSQLLocalDB' -database 'SDDisco'
 }
 
-function start-webappDiscovery {
+function invoke-webappDiscovery {
     [cmdletbinding()]
     param (
         [string]$webAppURL
@@ -186,8 +186,6 @@ function discover-SiteCollections {
         } | 
         push-discoveredURL -discoveryID $discoID -urlType 'SiteCollection' -parentURLID $parentURLID
 
-    $siteCollections | 
-        Save-SiteCollection -discoveryQueueID $parentURLID
 }
 
 function discover-SiteCollectionContents {
@@ -200,11 +198,14 @@ function discover-SiteCollectionContents {
 
     $sc = get-siteDataSiteCollection -URL $url
 
-    $webs = $sc.site.Web.Webs.Web | select -ExpandProperty URL
+    $wc.Site.Web | select -ExpandProperty URL |
+        push-discoveredURL -discoveryID $discoID -urlType 'Site' -parentURLID $parentURLID
 
-    $webs |  push-discoveredURL -discoveryID $discoID -urlType 'Site' -parentURLID $parentURLID
+#    $webs = $sc.site.Web.Webs.Web | select -ExpandProperty URL
 
-    $sc.site.Web.Lists.List | select -ExpandProperty id| push-discoveredList -discoveryID $discoID -urlType 'List' -parentURLID $parentURLID -url $URL
+#    $webs |  push-discoveredURL -discoveryID $discoID -urlType 'Site' -parentURLID $parentURLID
+
+#    $sc.site.Web.Lists.List | select -ExpandProperty id| push-discoveredList -discoveryID $discoID -urlType 'List' -parentURLID $parentURLID -url $URL
 
 }
 
@@ -392,9 +393,32 @@ function save-SiteCollection {
         $siteCollectionSDXML,
         $discoveryQueueID
     )
-    begin {}
-    process {}
-    end {}
+    begin {
+        $sqlConn = getSQLConnection
+        $sqlTran = $sqlConn.beginTransaction()
+    }
+    process {
+        $tsql = @'
+            select  SPSC_ID,
+                    SPSC_DQID,
+                    SPSC_SiteSubscriptionID,
+                    SPSC_URL,
+                    SPSC_SPID,
+                    SPSC_LastModified,
+                    SPSC_ContentDatabaseID,
+                    SPSC_WebApplicationID,
+                    SPSC_ChangeID,
+                    SPSC_SiteTemplate,
+                    SPSC_SiteTemplateID
+            from SPSiteCollection where SPSC_SPID = @SPSC_SPID
+'@
+        $result = Invoke-Query -sql $tsql -connection $sqlConn -transaction $sqlTran -parameters @{SPSC_SPID=$siteCollectionSDXML.VirtualServer.Metadata.ID}
+        
+    }
+    end {
+        $sqlTran.Commit()
+        $sqlConn.close()
+    }
 }
 
-Export-ModuleMember -function start-webappDiscovery
+Export-ModuleMember -function invoke-webappDiscovery
