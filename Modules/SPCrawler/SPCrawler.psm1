@@ -6,7 +6,7 @@ function getSQLConnection {
     New-Connection -server '(LocalDb)\MSSQLLocalDB' -database 'SDDisco'
 }
 
-function invoke-webappDiscovery {
+function start-webappDiscovery {
     [cmdletbinding()]
     param (
         [string]$webAppURL
@@ -40,9 +40,6 @@ function import-discoveredURL {
         [parameter(Mandatory=$True,ValueFromPipeline=$true,Position=1)]
         $discovery
     )
-    begin {
-        $sqlConn = getSQLConnection
-    }
     process {
         switch ($discovery.DQ_URLType) {
             'WebApp' {discover-SiteCollections $discovery.DQ_URL $discovery.DQ_DCID $discovery.DQ_ID}
@@ -51,9 +48,6 @@ function import-discoveredURL {
             'List' {}
         }
         $discovery.DQ_ID
-    }
-    end {
-        $sqlConn.close()
     }
 }
 
@@ -163,7 +157,6 @@ function pop-discoveredURL {
     }
 }
     
-
 function discover-SiteCollections {
     [cmdletbinding()]
     param (
@@ -173,8 +166,8 @@ function discover-SiteCollections {
     )
 
     $wa = get-siteDataWebApp -webAppURL $webAppURL
-
-#    save-WebApp -webAppSDXML $wa -discoveryQueueID $parentURLID
+    
+    Save-discoveredXML -XML $wa -DQID $parentURLID
 
     $siteCollections = $wa.VirtualServer.ContentDatabases.ContentDatabase | 
         select -ExpandProperty ID  | 
@@ -197,16 +190,8 @@ function discover-SiteCollectionContents {
     )
 
     $sc = get-siteDataSiteCollection -URL $url
-
-    $wc.Site.Web | select -ExpandProperty URL |
-        push-discoveredURL -discoveryID $discoID -urlType 'Site' -parentURLID $parentURLID
-
-#    $webs = $sc.site.Web.Webs.Web | select -ExpandProperty URL
-
-#    $webs |  push-discoveredURL -discoveryID $discoID -urlType 'Site' -parentURLID $parentURLID
-
-#    $sc.site.Web.Lists.List | select -ExpandProperty id| push-discoveredList -discoveryID $discoID -urlType 'List' -parentURLID $parentURLID -url $URL
-
+    push-discoveredURL -discoveryID $discoID -urlType 'Site' -parentURLID $parentURLID -url $URL
+    Save-discoveredXML -XML $sc -DQID $parentURLID
 }
 
 function discover-SiteContents {
@@ -219,6 +204,8 @@ function discover-SiteContents {
 
     $sc = get-siteDataSite -URL $url
 
+    Save-discoveredXML -XML $sc -DQID $parentURLID
+
     $webs = $sc.Web.Webs.Web | select -ExpandProperty URL
     
     $webs |  push-discoveredURL -discoveryID $discoID -urlType 'Site' -parentURLID $parentURLID
@@ -227,198 +214,17 @@ function discover-SiteContents {
 
 }
 
-function save-WebApp {
+function Save-discoveredXML {
     [cmdletbinding()]
     param (
-        [parameter(Mandatory=$True,ValueFromPipeline=$true,Position=1)]
-        $webAppSDXML,
-        $discoveryQueueID
-    )
-    begin {
-        $sqlConn = getSQLConnection
-        $sqlTran = $sqlConn.beginTransaction()
-        $commit = $false
-    }
-    Process {
-        $tsql = 'select SPWA_ID,SPWA_DQID,SPWA_SPID,SPWA_Version,SPWA_URL,SPWA_URLZone,SPWA_URLIsHostHeader from SPWebApp where SPWA_SPID = @SPWA_SPID'
-        $result = Invoke-Query -sql $tsql -connection $sqlConn -transaction $sqlTran -parameters @{SPWA_SPID=$webAppSDXML.VirtualServer.Metadata.ID}
-        if ($result.count -eq 0) {
-            $tsql = 'insert into SPWebApp(SPWA_SPID,SPWA_DQID,SPWA_Version,SPWA_URL,SPWA_URLZone,SPWA_URLIsHostHeader) values(@SPWA_SPID,@SPWA_DQID,@SPWA_Version,@SPWA_URL,@SPWA_URLZone,@SPWA_URLIsHostHeader);select scope_identity() scope_identity'
-            $x = invoke-query -sql $tsql -connection $sqlConn -transaction $sqlTran `
-                -parameters @{SPWA_SPID=$webAppSDXML.VirtualServer.Metadata.ID;
-                              SPWA_DQID=$discoveryQueueID;
-                              SPWA_Version=$webAppSDXML.VirtualServer.Metadata.Version;
-                              SPWA_URL=$webAppSDXML.VirtualServer.Metadata.URL;
-                              SPWA_URLZone=$webAppSDXML.VirtualServer.Metadata.URLZone;
-                              SPWA_URLIsHostHeader=$webAppSDXML.VirtualServer.Metadata.URLIsHostHeader}
-            $SPWA_ID = $x.scope_identity
-        } else {
-            $SPWA_ID = $result.SPWA_ID
-            $tsql = 'update SPWebApp '
-            $parameters = @{}
-
-            $parameters.SPWA_DQID = $discoveryQueueID
-            $tsql += "set SPWA_DQID = @SPWA_DQID"
-
-            foreach ($attr in $webAppSDXML.VirtualServer.Metadata) {
-                $paramName=""
-                $attributeValue = $attr."#text"
-                switch ($attr.Name) {
-                    "Version" { $paramName="SPWA_Version"}
-                    "URL" { $paramName="SPWA_URL"}
-                    "URLZone" {$paramName="SPWA_URLZone"}
-                    "URLIsHostHeader" {$paramName="SPWA_URLIsHostHeader"}
-                }
-                if ($paramName -ne "" -and $result.$paramName -ne $attributeValue) {
-                    $parameters.$paramName = $attributeValue
-                    $tsql += ", $paramName = @$paramName"
-                }
-            }
-            $parameters.SPWA_ID = $SPWA_ID
-            $tsql += " where SPWA_ID = @SPWA_ID"
-            write-verbose "update SPWebApp SQL: $tsql"
-            $x = invoke-SQL -sql $tsql -connection $sqlConn -transaction $sqlTran -parameters $parameters
-        }
-        $sqlTran.Commit()
-        save-webappPolicies -policyXML $webAppSDXML.VirtualServer.Policies -SPWebAppID $SPWA_ID
-    }
-    End {
-        $sqlConn.close()
-    }
-}
-
-function save-webappPolicies {
-    [cmdletbinding()]
-    param(
-        $policyXML,
-        $SPWebAppID
-    )
-    $currLoginNames = $policyXML.PolicyUser | select -ExpandProperty LoginName
-    remove-webAppPoliciesNotIn -currLoginNames $currLoginNames -spWebAppID $SPWebAppID
-    $policyXML.PolicyUser | save-webappPolicy -SPWebAppID $SPWebAppID
-}
-
-function save-webappPolicy {
-    [cmdletbinding()]
-    param(
-        [parameter(Mandatory=$True,ValueFromPipeline=$true,Position=1)]
-        $policy,
-        $SPWebAppID
-    )
-    begin {
-        $sqlConn = getSQLConnection
-        $sqlTran = $sqlConn.beginTransaction()
-    }
-    Process {
-        $tsql = 'select SPP_ID, SPP_LoginName, SPP_BinaryIdentifier,SPP_BinaryIdentifierType,SPP_GrantMask, SPP_DenyMask from SPWebAppPolicy join SPPolicy on SPP_ID = SPWAP_SPPID and SPP_LoginName = @SPP_LoginName and SPWAP_SPWAID = @SPWA_ID'
-        $result = Invoke-Query -sql $tsql -connection $sqlConn -transaction $sqlTran -parameters @{SPP_LoginName=$policy.LoginName;SPWA_ID=$SPWebAppID}
-        if ($result.count -eq 0) {
-            $tsql = 'insert into SPPolicy(SPP_LoginName, SPP_BinaryIdentifier,SPP_BinaryIdentifierType,SPP_GrantMask, SPP_DenyMask) values (@SPP_LoginName, @SPP_BinaryIdentifier,@SPP_BinaryIdentifierType,@SPP_GrantMask, @SPP_DenyMask);select scope_identity() scope_identity'
-            $x = Invoke-Query -sql $tsql -connection $sqlConn -transaction $sqlTran `
-                -parameters @{
-                    SPP_LoginName=$policy.LoginName;
-                    SPP_BinaryIdentifier=$policy.BinaryIdentifier;
-                    SPP_BinaryIdentifierType=$policy.BinaryIdentifierType;
-                    SPP_GrantMask=$policy.GrantMask;
-                    SPP_DenyMask=$policy.DenyMask
-                }
-            $SPP_ID = $x.scope_identity
-            $tsql = 'insert into SPWebAppPolicy(SPWAP_SPWAID,SPWAP_SPPID) values (@SPWAP_SPWAID,@SPWAP_SPPID)'
-            $x = Invoke-Sql -sql $tsql -connection $sqlConn -transaction $sqlTran `
-                -parameters @{SPWAP_SPWAID=$SPWebAppID;SPWAP_SPPID=$SPP_ID}
-        } else {
-            $SPP_ID = $result.SPP_ID
-            $tsql = 'update SPPolicy '
-            $parameters = @{}
-            $needSet = $true
-            foreach ($attr in $policy.Attributes) {
-                $paramName=""
-                $attributeValue = $attr."#text"
-                switch ($attr.Name) {
-                    "LoginName" { $paramName="SPP_LoginName"}
-                    "BinaryIdentifier" { $paramName="SPP_BinaryIdentifier"}
-                    "BinaryIdentifierType" {$paramName="SPP_BinaryIdentifierType"}
-                    "GrantMask" {$paramName="SPP_GrantMask"}
-                    "DenyMask" {$paramName="SPP_DenyMask"}
-                }
-                if ($paramName -ne "" -and $result.$paramName -ne $attributeValue) {
-                    $parameters.$paramName = $attributeValue
-                    if ($needSet) {
-                        $tsql += "set $paramName = @$paramName"
-                        $needSet = $false
-                    } else {
-                        $tsql += ", $paramName = @$paramName"
-                    }
-                }
-            }
-            if (!$needSet) {
-                $parameters.SPA_ID = $SPP_ID
-                $tsql += " where SPP_ID = @SPP_ID"
-                write-verbose "update SPPolicy SQL: $tsql"
-                $x = invoke-SQL -sql $tsql -connection $sqlConn -transaction $sqlTran -parameters $parameters
-            }
-        }
-    }
-    end {
-        $sqlTran.Commit()
-        $sqlConn.close()
-    }
-}
-
-function remove-webAppPoliciesNotIn {
-    [cmdletbinding()]
-    param (
-        $currLoginNames,
-        $spWebAppID
+        $XML,
+        $DQID
     )
     $sqlConn = getSQLConnection
-    $sqlTran = $sqlConn.beginTransaction()
-    $tsql = 'select SPP_ID, SPP_LoginName, SPWAP_ID from SPWebAppPolicy join SPPolicy on SPP_ID = SPWAP_SPPID where SPWAP_SPWAID = @SPWA_ID'
-    $x = Invoke-Query -sql $tsql -connection $sqlConn -transaction $sqlTran -parameters @{SPWA_ID=$spWebAppID}
-    $x | where {$currLoginNames -notcontains $_.SPP_LoginName} |
-        foreach {
-            $tsql = 'delete from SPWebAppPolicy where SPWAP_ID = @SPWAP_ID'
-            $result = Invoke-Sql -sql $tsql -connection $sqlConn -transaction $sqlTran -parameters @{SPWAP_ID=$_.SPWAP_ID}
-            $tsql = 'delete from SPPolicy where SPP_ID = @SPP_ID'
-            $result = Invoke-Sql -sql $tsql -connection $sqlConn -transaction $sqlTran -parameters @{SPP_ID=$_.SPP_ID}
-        }
-    $sqlTran.Commit()
+    $tsql = "update DiscoveryQueue set DQ_SiteDataXML=@DQ_SiteDataXML where DQ_ID=@DQ_ID"
+    $result = Invoke-Sql -sql $tsql -connection $sqlConn -parameters @{DQ_SiteDataXML=$xml.outerxml;DQ_ID=$DQID}
     $sqlConn.close()
 }
 
-function save-SiteCollection {
-    [cmdletbinding()]
-    param (
-        [parameter(Mandatory=$True,ValueFromPipeline=$true,Position=1)]
-        $siteCollectionSDXML,
-        $discoveryQueueID
-    )
-    begin {
-        $sqlConn = getSQLConnection
-        $sqlTran = $sqlConn.beginTransaction()
-    }
-    process {
-        $tsql = @'
-            select  SPSC_ID,
-                    SPSC_DQID,
-                    SPSC_SiteSubscriptionID,
-                    SPSC_URL,
-                    SPSC_SPID,
-                    SPSC_LastModified,
-                    SPSC_ContentDatabaseID,
-                    SPSC_WebApplicationID,
-                    SPSC_ChangeID,
-                    SPSC_SiteTemplate,
-                    SPSC_SiteTemplateID
-            from SPSiteCollection where SPSC_SPID = @SPSC_SPID
-'@
-        $result = Invoke-Query -sql $tsql -connection $sqlConn -transaction $sqlTran -parameters @{SPSC_SPID=$siteCollectionSDXML.VirtualServer.Metadata.ID}
-        
-    }
-    end {
-        $sqlTran.Commit()
-        $sqlConn.close()
-    }
-}
 
-Export-ModuleMember -function invoke-webappDiscovery
+Export-ModuleMember -function start-webappDiscovery
