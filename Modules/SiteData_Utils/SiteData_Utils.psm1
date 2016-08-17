@@ -1,14 +1,14 @@
-﻿function get-siteDataWebApp {
+﻿
+function get-siteDataWebApp {
     [cmdletbinding()]
     param(
         [parameter(Mandatory=$true)]
         [string]$webAppURL
     )
     $sdURL = "{0}/_vti_bin/sitedata.asmx" -f $webAppURL
-    $sdProxy = New-WebServiceProxy -Uri $sdURL -UseDefaultCredential
+    $script:sdProxy = New-WebServiceProxy -Uri $sdURL -UseDefaultCredential
     $junk = " "
-    $x = $sdProxy.GetContent("VirtualServer",$nil,$webAppURL,$ni,$true,$false,[ref]$junk)
-    $sdProxy.Dispose()
+    $x = $script:sdProxy.GetContent("VirtualServer",$nil,$webAppURL,$ni,$true,$false,[ref]$junk)
     [xml]$x
 }
 
@@ -23,15 +23,16 @@ function get-siteDataContentDB {
 
     )
     begin {
-        $sdURL = "{0}/_vti_bin/sitedata.asmx" -f $webAppURL
-        $sdProxy = New-WebServiceProxy -Uri $sdURL -UseDefaultCredential
+#        $sdURL = "{0}/_vti_bin/sitedata.asmx" -f $webAppURL
+#        $script:sdProxy = New-WebServiceProxy -Uri $sdURL -UseDefaultCredential
+        $script:sdProxy.URL = "{0}/_vti_bin/sitedata.asmx" -f $webAppURL
         $junk = " "
     }
     Process {
-        [xml]($sdProxy.GetContent("ContentDatabase",$contentDBID,$webAppURL,$ni,$true,$false,[ref]$junk))
+        $x = $script:sdProxy.GetContent("ContentDatabase",$contentDBID,$webAppURL,$ni,$true,$false,[ref]$junk)
+        [xml]$x
     }
     end {
-        $sdProxy.Dispose()
     }
 }
 
@@ -43,15 +44,15 @@ function get-siteDataSiteCollection {
     )
     begin {
         $junk = " "
-        $sdURL = "{0}/_vti_bin/sitedata.asmx" -f $URL
-        $sdProxy = New-WebServiceProxy -Uri $sdURL -UseDefaultCredential
-        $sdProxy.URL = $sdURL
+ #       $sdURL = "{0}/_vti_bin/sitedata.asmx" -f $URL
+ #       $script:sdProxy = New-WebServiceProxy -Uri $sdURL -UseDefaultCredential
+        $script:sdProxy.URL = "{0}/_vti_bin/sitedata.asmx" -f $URL
     }
     Process {
-        [xml]($sdProxy.GetContent("SiteCollection",$nil,$nil,$ni,$true,$false,[ref]$junk))
+        $x = $script:sdProxy.GetContent("SiteCollection",$nil,$nil,$ni,$true,$false,[ref]$junk)
+        [xml]$x
     }
     end {
-        $sdProxy.Dispose()
     }
         
 }
@@ -64,15 +65,15 @@ function get-siteDataSite {
     )
     begin {
         $junk = " "
-        $sdURL = "{0}/_vti_bin/sitedata.asmx" -f $URL
-        $sdProxy = New-WebServiceProxy -Uri $sdURL -UseDefaultCredential
-        $sdProxy.URL = $sdURL
+#        $sdURL = "{0}/_vti_bin/sitedata.asmx" -f $URL
+#        $script:sdProxy = New-WebServiceProxy -Uri $sdURL -UseDefaultCredential
+        $script:sdProxy.URL = "{0}/_vti_bin/sitedata.asmx" -f $URL
     }
     Process {
-        [xml]($sdProxy.GetContent("Site",$nil,$nil,$ni,$true,$false,[ref]$junk))
+        $x = $script:sdProxy.GetContent("Site",$nil,$nil,$ni,$true,$false,[ref]$junk)
+        [xml]$x
     }
     end {
-        $sdProxy.Dispose()
     }
 }
 
@@ -87,15 +88,15 @@ function get-siteDataList {
     )
     begin {
         $junk = " "
-        $sdURL = "{0}/_vti_bin/sitedata.asmx" -f $URL
-        $sdProxy = New-WebServiceProxy -Uri $sdURL -UseDefaultCredential
-        $sdProxy.URL = $sdURL
+#        $sdURL = "{0}/_vti_bin/sitedata.asmx" -f $URL
+#        $script:sdProxy = New-WebServiceProxy -Uri $sdURL -UseDefaultCredential
+        $script:sdProxy.URL = "{0}/_vti_bin/sitedata.asmx" -f $URL
     }
     Process {
-        [xml]($sdProxy.GetContent("List",$listID,$nil,$ni,$true,$false,[ref]$junk))
+        $x = $script:sdProxy.GetContent("List",$listID,$nil,$ni,$true,$false,[ref]$junk)
+        [xml]$x
     }
     end {
-        $sdProxy.Dispose()
     }
 }
         
