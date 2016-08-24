@@ -1,3 +1,10 @@
+drop table SharePointGroupUsers
+drop table SharePointUsers
+drop table SharePointGroups
+drop table SPWebAppPolicy
+drop table SPWebApp
+drop table SPSiteCollection
+drop table SPPolicy
 drop table DiscoveryQueue
 drop table DiscoveryCrawls
 go
@@ -17,13 +24,11 @@ create table DiscoveryQueue(
 	DQ_URLType varchar(25) NOT NULL,
 	DQ_ListID varchar(38) null,
 	DQ_Crawled bit not null default(0),
+	DQ_SiteDataXML xml
 )
 
 GO
 
-drop table SPWebAppPolicy
-drop table SPWebApp
-go
 create table SPWebApp (
 	SPWA_ID	int identity not null primary key,
 	SPWA_DQID bigint not null references DiscoveryQueue(DQ_ID),
@@ -36,17 +41,13 @@ create table SPWebApp (
 
 create table SPPolicy (
 	SPP_ID int not null identity primary key,
+	SPP_SPWAID int not null references SPWebApp(SPWA_ID),
 	SPP_LoginName varchar(100) not null,
 	SPP_BinaryIdentifier varchar(200) not null,
 	SPP_BinaryIdentifierType varchar(50) not null,
 	SPP_GrantMask numeric(25,0) not null,
-	SPP_DenyMask numeric(25,0) not null
-)
-
-create table SPWebAppPolicy (
-	SPWAP_ID integer not null identity primary key,
-	SPWAP_SPWAID int not null references SPWebApp(SPWA_ID),
-	SPWAP_SPPID int not null references SPPolicy(SPP_ID)
+	SPP_DenyMask numeric(25,0) not null,
+	SPP_Deleted bit default(0)
 )
 
 create table SPSiteCollection(
@@ -60,7 +61,8 @@ create table SPSiteCollection(
 	SPSC_WebApplicationID varchar(38) not null,
 	SPSC_ChangeID	varchar(200),
 	SPSC_SiteTemplate varchar(10),
-	SPSC_SiteTemplateID	varchar(5)
+	SPSC_SiteTemplateID	varchar(5),
+	SPSC_Deleted bit default(0)
 )
 
 create table SharePointGroups (
@@ -71,7 +73,8 @@ create table SharePointGroups (
 	SPG_Name	varchar(100) not null,
 	SPG_Description varchar(500),
 	SPG_OwnerID	int not null,
-	SPG_OwnerIsUser bit not null
+	SPG_OwnerIsUser bit not null,
+	SPG_Deleted bit default(0)
 )
 
 create table SharePointUsers (
@@ -87,13 +90,15 @@ create table SharePointUsers (
 	SPU_isSiteAdmin	bit,
 	SPU_isDomainGroup bit,
 	SPU_IsShareByEmailGuestUser bit,
-	SPU_IsShareByLinkGuestUser bit
+	SPU_IsShareByLinkGuestUser bit,
+	SPU_Deleted bit default(0)
 )
 
 create Table SharePointGroupUsers (
 	SPGU_ID	bigint not null identity primary key,
 	SPGU_SPSCID int not null references SPSiteCollection(SPSC_ID),
 	SPGU_SPGID	bigint not null references SharePointGroups(SPG_ID),
-	SPGU_SPUID	bigint not null references SharePointUsers(SPU_ID)
+	SPGU_SPUID	bigint not null references SharePointUsers(SPU_ID),
+	SPGU_Deleted bit default(0)
 )
 

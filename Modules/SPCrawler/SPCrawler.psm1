@@ -32,7 +32,6 @@ function search-DiscoveryQueue {
         foreach ($discovery in $crawlQueue) {
             $dqID = import-discoveredURL -discovery $discovery
             pop-discoveredURL -URLID $dqID
-            Remove-Variable dqID
         }
 #            Start-RSJob -ScriptBlock {
 #                import-discoveredURL -discovery $_ | pop-discoveredURL
@@ -41,7 +40,6 @@ function search-DiscoveryQueue {
 #            wait-rsjob -ShowProgress | 
 #            remove-rsjob
     } until ($crawlQueue.count -eq 0)
-    Remove-Variable crawlQueue
     $sqlConn.close()
     $sqlConn.dispose()
 } 
@@ -54,11 +52,14 @@ function import-discoveredURL {
         $discovery
     )
     process {
+        if ($discovery.DQ_URLType -eq "List") {
+            Write-Verbose "test"
+        }
         switch ($discovery.DQ_URLType) {
             'WebApp' {discover-SiteCollections $discovery.DQ_URL $discovery.DQ_DCID $discovery.DQ_ID}
             'SiteCollection' { discover-SiteCollectionContents $discovery.DQ_URL $discovery.DQ_DCID $discovery.DQ_ID}
             'Site' { discover-SiteContents $discovery.DQ_URL $discovery.DQ_DCID $discovery.DQ_ID}
-            'List' {}
+            'List' { discover-ListContents $discovery.DQ_URL $discovery.DQ_DCID $discovery.DQ_ID $discovery.DQ_ListID}
         }
         $discovery.DQ_ID
     }
@@ -79,7 +80,6 @@ function invoke-webappDiscovery {
         $x.scope_identity
     }
     end {
-        Remove-Variable tsql
         $sqlConn.close()
         $sqlConn.dispose()
     }
@@ -97,10 +97,8 @@ function complete-webappDiscovery {
     }
     process {
         $x = Invoke-sql -sql $tsql -connection $sqlConn -parameters @{discoveryID=$discoveryID}
-        Remove-Variable x
     }
     end {
-        Remove-Variable tsql
         $sqlConn.close()
         $sqlConn.dispose()
     }
@@ -125,9 +123,7 @@ function push-discoveredURL {
             -parameters @{DQ_ParentID=$parentURLID;DQ_DCID=$discoveryID;DQ_URL=$url;DQ_URLType=$urlType}
     }
     end {
-        Remove-Variable tsql
         $sqlTran.Commit()
-        Remove-Variable sqlTran
         $sqlConn.close()
         $sqlConn.dispose()
     }
@@ -153,9 +149,7 @@ function push-discoveredList {
             -parameters @{DQ_ParentID=$parentURLID;DQ_DCID=$discoveryID;DQ_URL=$url;DQ_URLType=$urlType;DQ_ListID=$ListID}
     }
     end {
-        Remove-Variable tsql
         $sqlTran.Commit()
-        Remove-Variable sqlTran
         $sqlConn.close()
         $sqlConn.dispose()
     }
@@ -176,9 +170,7 @@ function pop-discoveredURL {
         $result = invoke-sql -sql $tsql -connection $sqlConn -transaction $sqlTran -parameters @{DQ_ID=$URLID}
     }
     end {
-        Remove-Variable tsql
         $sqlTran.Commit()
-        Remove-Variable sqlTran
         $sqlConn.close()
         $sqlConn.dispose()
     }
@@ -202,7 +194,6 @@ function discover-SiteCollections {
             push-discoveredURL -discoveryID $discoID -urlType 'SiteCollection' -parentURLID $parentURLID -url $site.URL
         }
     }
-    Remove-Variable wa
 }
 
 function discover-SiteCollectionContents {
@@ -216,7 +207,6 @@ function discover-SiteCollectionContents {
     $sc = get-siteDataSiteCollection -URL $url
     push-discoveredURL -discoveryID $discoID -urlType 'Site' -parentURLID $parentURLID -url $URL
     Save-discoveredXML -XML $sc -DQID $parentURLID
-    Remove-Variable sc
 }
 
 function discover-SiteContents {
@@ -239,11 +229,22 @@ function discover-SiteContents {
     }
 
     foreach ($list in $lists) {
-        push-discoveredList -ListID $list.ID -discoveryID $discoID -urlType 'List' -parentURLID $parentURLID
+        push-discoveredList -url $URL -ListID $list.ID -discoveryID $discoID -urlType 'List' -parentURLID $parentURLID
     }
-    Remove-Variable webs
-    Remove-Variable lists
-    Remove-Variable sc
+}
+
+function discover-ListContents {
+    [cmdletbinding()]
+    param (
+        $URL,
+        $discoID,
+        $parentURLID,
+        $listID
+    )
+
+    $ld = get-siteDataList -URL $url -ListID $listID
+
+    Save-discoveredXML -XML $ld -DQID $parentURLID
 }
 
 function Save-discoveredXML {
@@ -255,8 +256,8 @@ function Save-discoveredXML {
     $sqlConn = getSQLConnection
     $tsql = "update DiscoveryQueue set DQ_SiteDataXML=@DQ_SiteDataXML where DQ_ID=@DQ_ID"
     $result = Invoke-Sql -sql $tsql -connection $sqlConn -parameters @{DQ_SiteDataXML=$xml.outerxml;DQ_ID=$DQID}
-    Remove-Variable tsql
     $sqlConn.close()
     $sqlConn.dispose()
 }
 
+Export-ModuleMember -Function start-webappDiscovery
